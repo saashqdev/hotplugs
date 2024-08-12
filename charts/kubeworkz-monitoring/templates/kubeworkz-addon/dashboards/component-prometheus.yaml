@@ -1,0 +1,167 @@
+apiVersion: monitoring.kubeworkz.io/v1
+kind: Dashboard
+metadata:
+  name: prometheus
+  labels:
+    scope: component-monitoring
+    component: prometheus
+    app: {{ template "kube-prometheus-stack.name" $ }}-dashboard
+{{ include "kube-prometheus-stack.labels" $ | indent 4 }}
+  namespace: kubeworkz-monitoring
+spec:
+  title: Prometheus
+  variables:
+  - query:
+      name: cluster
+      label: K8s Cluster
+      request: "label_values(up, cluster)"
+      datasource: prometheus
+  - query:
+      name: job
+      label: Prometheus Sharding
+      request: "label_values(prometheus_build_info{cluster=~\"$cluster\"}, job)"
+      datasource: prometheus
+      multi: true
+  - query:
+      name: Instance
+      label: Prometheus copy
+      request: "label_values(prometheus_build_info{cluster=~\"$cluster\", job=~\"$job\"}, instance)"
+      datasource: prometheus
+      includeAll: true
+  rows:
+  - name: Prometheus Status
+    panels:
+    - table:
+        title: Prometheus Status
+        datasource: Prometheus
+        span: 12
+        targets:
+        - prometheus:
+            query: "count by (cluster, job, instance, pod, version) (prometheus_build_info{cluster=~\"$cluster\", job=~\"$job\", instance=~\"$instance\"})"
+            instant: true
+            format: table
+        - prometheus:
+            query: "max by (cluster, job, instance,pod) (time() - process_start_time_seconds{cluster=~\"$cluster\", job=~\"$job\", instance=~\"$instance\"})"
+            ref: A
+            instant: true
+            format: table
+        hiddenColumns: ["Time"]
+        styles:
+        - pattern: "cluster"
+          alias: Cluster
+        - pattern: "job"
+          alias: Prometheus Sharding
+        - pattern: "instance"
+          alias: Prometheus Pod
+        - pattern: "pod"
+          alias: Pod
+        - pattern: "version"
+          alias: Version
+        - pattern: "Value #A"
+          alias: Uptime
+          unit: s
+  - name: Service Discovery
+    panels:
+    - graph:
+        title: Target Synchronization Time
+        datasource: Prometheus
+        span: 6
+        targets:
+        - prometheus:
+            query: "sum(rate(prometheus_target_sync_length_seconds_sum{cluster=~\"$cluster\",job=~\"$job\",instance=~\"$instance\"}[2m])) by (cluster, scrape_job) * 1e3"
+            legend: "{{`{{`}}scrape_job{{`}}`}}"
+        axes:
+          left:
+            unit: s
+    - graph:
+        title: Targets
+        datasource: Prometheus
+        span: 3
+        targets:
+        - prometheus:
+            query: "sum(prometheus_sd_discovered_targets{cluster=~\"$cluster\",job=~\"$job\",instance=~\"$instance\"}) by (cluster, job)"
+            legend: "Targets"
+    - graph:
+        title: Failed Configs
+        datasource: Prometheus
+        span: 3
+        targets:
+        - prometheus:
+            query: "sum(prometheus_sd_failed_configs{cluster=~\"$cluster\",job=~\"$job\",instance=~\"$instance\"}) by (cluster, job)"
+            legend: "{{`{{`}}job{{`}}`}}"
+  - name: Monitoring Collection
+    panels:
+    - graph:
+        title: Collect Abnormal Frequency
+        datasource: Prometheus
+        span: 6
+        targets:
+        - prometheus:
+            query: "sum by (job) (rate(prometheus_target_scrapes_exceeded_body_size_limit_total{cluster=~\"$cluster\"}[2m]))"
+            legend: "exceeded body size limit: {{`{{`}}job{{`}}`}}"
+        - prometheus:
+            query: "sum by (job) (rate(prometheus_target_scrapes_exceeded_sample_limit_total{cluster=~\"$cluster\"}[2m]))"
+            legend: "exceeded sample limit: {{`{{`}}job{{`}}`}}"
+        - prometheus:
+            query: "sum by (job) (rate(prometheus_target_scrapes_sample_duplicate_timestamp_total{cluster=~\"$cluster\"}[2m]))"
+            legend: "duplicate timestamp: {{`{{`}}job{{`}}`}}"
+        - prometheus:
+            query: "sum by (job) (rate(prometheus_target_scrapes_sample_out_of_bounds_total{cluster=~\"$cluster\"}[2m]))"
+            legend: "out of bounds: {{`{{`}}job{{`}}`}}"
+        - prometheus:
+            query: "sum by (job) (rate(prometheus_target_scrapes_sample_out_of_order_total{cluster=~\"$cluster\"}[2m]))"
+            legend: "out of order: {{`{{`}}job{{`}}`}}"
+    - graph:
+        title: Sample Acquisition Rate (Per Second)
+        datasource: Prometheus
+        span: 6
+        targets:
+        - prometheus:
+            query: "rate(prometheus_tsdb_head_samples_appended_total{cluster=~\"$cluster\", job=~\"$job\",instance=~\"$instance\"}[2m])"
+            legend: "{{`{{`}}job{{`}}`}} {{`{{`}}instance{{`}}`}}"
+  - name: Storage
+    panels:
+    - graph:
+        title: Head Series Quantity
+        stack: true
+        datasource: Prometheus
+        span: 6
+        targets:
+        - prometheus:
+            query: "prometheus_tsdb_head_series{cluster=~\"$cluster\",job=~\"$job\",instance=~\"$instance\"}"
+            legend: "{{`{{`}}job{{`}}`}} {{`{{`}}instance{{`}}`}}"
+    - graph:
+        title: Head Chunks Quantity
+        stack: true
+        datasource: Prometheus
+        span: 6
+        targets:
+        - prometheus:
+            query: "prometheus_tsdb_head_chunks{cluster=~\"$cluster\", job=~\"$job\",instance=~\"$instance\"}"
+            legend: "{{`{{`}}job{{`}}`}} {{`{{`}}instance{{`}}`}}"
+  - name: Query
+    panels:
+    - graph:
+        title: Query Rate
+        datasource: Prometheus
+        stack: true
+        span: 6
+        targets:
+        - prometheus:
+            query: "rate(prometheus_engine_query_duration_seconds_count{cluster=~\"$cluster\", job=~\"$job\",instance=~\"$instance\",slice=\"inner_eval\"}[5m])"
+            legend: "{{`{{`}}job{{`}}`}} {{`{{`}}instance{{`}}`}}"
+        axes:
+          left:
+            unit: bps
+    - graph:
+        title: The Query Time at Each Stage in 90th Quantile
+        datasource: Prometheus
+        stack: true
+        span: 6
+        targets:
+        - prometheus:
+            query: "max by (job, slice) (prometheus_engine_query_duration_seconds{cluster=~\"$cluster\", quantile=\"0.9\",job=~\"$job\",instance=~\"$instance\"}) * 1e3"
+            legend: "{{`{{`}}job{{`}}`}} {{`{{`}}slice{{`}}`}}}"
+        axes:
+          left:
+            unit: s

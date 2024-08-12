@@ -1,0 +1,151 @@
+apiVersion: monitoring.kubeworkz.io/v1
+kind: Dashboard
+metadata:
+  name: kube-scheduler
+  labels:
+    scope: component-monitoring
+    component: kube-scheduler
+    app: {{ template "kube-prometheus-stack.name" $ }}-dashboard
+{{ include "kube-prometheus-stack.labels" $ | indent 4 }}
+  namespace: kubeworkz-monitoring
+spec:
+  title: Kube Scheduler
+  variables:
+  - query:
+      name: cluster
+      label: Cluster
+      request: "label_values(up, cluster)"
+      datasource: prometheus
+  - query:
+      name: instance
+      label: Instance
+      request: "label_values(process_cpu_seconds_total{cluster=\"$cluster\", job=\"kube-scheduler\"}, instance)"
+      datasource: prometheus
+      includeAll: true
+  rows:
+  - name: Scheduler Core Monitoring
+    panels:
+    - singleStat:
+        title: Has Leader?
+        datasource: Prometheus
+        span: 2
+        targets:
+        - prometheus:
+            query: "sum(leader_election_master_status{cluster=\"$cluster\",job=\"kube-scheduler\"})"
+            instant: true
+    - graph:
+        title: Scheduling Rate
+        datasource: Prometheus
+        span: 5
+        targets:
+        - prometheus:
+            query: "sum(rate(scheduler_e2e_scheduling_duration_seconds_count{cluster=\"$cluster\", job=\"kube-scheduler\", instance=~\"$instance\"}[5m])) by (cluster, instance)"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} e2e"
+        - prometheus:
+            query: "sum(rate(scheduler_binding_duration_seconds_count{cluster=\"$cluster\", job=\"kube-scheduler\", instance=~\"$instance\"}[5m])) by (cluster, instance)"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} binding"
+        - prometheus:
+            query: "sum(rate(scheduler_scheduling_algorithm_duration_seconds_count{cluster=\"$cluster\", job=\"kube-scheduler\", instance=~\"$instance\"}[5m])) by (cluster, instance)"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} scheduling algorithm"
+        - prometheus:
+            query: "sum(rate(scheduler_volume_scheduling_duration_seconds_count{cluster=\"$cluster\", job=\"kube-scheduler\", instance=~\"$instance\"}[5m])) by (cluster, instance)"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} volume"
+        axes:
+          left:
+            unit: ops
+    - graph:
+        title: Scheduling Delay 99th Quantile
+        datasource: Prometheus
+        span: 5
+        targets:
+        - prometheus:
+            query: "histogram_quantile(0.99, sum(rate(scheduler_e2e_scheduling_duration_seconds_bucket{cluster=\"$cluster\", job=\"kube-scheduler\",instance=~\"$instance\"}[5m])) by (cluster, instance, le))"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} e2e"
+        - prometheus:
+            query: "histogram_quantile(0.99, sum(rate(scheduler_binding_duration_seconds_bucket{cluster=\"$cluster\", job=\"kube-scheduler\",instance=~\"$instance\"}[5m])) by (cluster, instance, le))"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} binding"
+        - prometheus:
+            query: "histogram_quantile(0.99, sum(rate(scheduler_scheduling_algorithm_duration_seconds_bucket{cluster=\"$cluster\", job=\"kube-scheduler\",instance=~\"$instance\"}[5m])) by (cluster, instance, le))"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} scheduling algorithm"
+        - prometheus:
+            query: "histogram_quantile(0.99, sum(rate(scheduler_volume_scheduling_duration_seconds_bucket{cluster=\"$cluster\", job=\"kube-scheduler\",instance=~\"$instance\"}[5m])) by (cluster, instance, le))"
+            legend: "{{`{{`}}cluster{{`}}`}} {{`{{`}}instance{{`}}`}} volume"
+        axes:
+          left:
+            unit: s
+  - name: API Request Overview
+    panels:
+    - graph:
+        title: Kube API Request Rate
+        datasource: Prometheus
+        span: 5
+        targets:
+        - prometheus:
+            query: "sum(rate(rest_client_requests_total{job=\"kube-scheduler\", instance=~\"$instance\",code=~\"2..\"}[2m]))"
+            legend: "2xx"
+        - prometheus:
+            query: "sum(rate(rest_client_requests_total{job=\"kube-scheduler\", instance=~\"$instance\",code=~\"3..\"}[2m]))"
+            legend: "3xx"
+        - prometheus:
+            query: "sum(rate(rest_client_requests_total{job=\"kube-scheduler\", instance=~\"$instance\",code=~\"4..\"}[2m]))"
+            legend: "4xx"
+        - prometheus:
+            query: "sum(rate(rest_client_requests_total{job=\"kube-scheduler\", instance=~\"$instance\",code=~\"5..\"}[2m]))"
+            legend: "5xx"
+        axes:
+          left:
+            unit: reqps
+    - graph:
+        title: Post Request Delay 99th Quantile
+        datasource: Prometheus
+        span: 7
+        targets:
+        - prometheus:
+            query: "histogram_quantile(0.99, sum(rate(rest_client_request_duration_seconds_bucket{cluster=\"$cluster\", job=\"kube-scheduler\", instance=~\"$instance\", verb=\"POST\"}[5m])) by (verb, url, le))"
+            legend: "{{`{{`}}verb{{`}}`}} {{`{{`}}url{{`}}`}}"
+        axes:
+          left:
+            unit: s
+    - graph:
+        title: Get Request Delay 99th Quantile
+        datasource: Prometheus
+        span: 12
+        targets:
+        - prometheus:
+            query: "histogram_quantile(0.99, sum(rate(rest_client_request_duration_seconds_bucket{cluster=\"$cluster\", job=\"kube-scheduler\", instance=~\"$instance\", verb=\"GET\"}[5m])) by (verb, url, le))"
+            legend: "{{`{{`}}verb{{`}}`}} {{`{{`}}url{{`}}`}}"
+        axes:
+          left:
+            unit: s
+  - name: Resource Usage
+    panels:
+    - graph:
+        title: Memory
+        datasource: Prometheus
+        span: 4
+        targets:
+        - prometheus:
+            query: "process_resident_memory_bytes{job=\"kube-scheduler\",instance=~\"$instance\", cluster=\"$cluster\"}"
+            legend: "{{`{{`}}instance{{`}}`}}"
+        axes:
+          left:
+            unit: byte
+    - graph:
+        title: CPU Usage
+        datasource: Prometheus
+        span: 4
+        targets:
+        - prometheus:
+            query: "rate(process_cpu_seconds_total{job=\"kube-scheduler\",instance=~\"$instance\", cluster=\"$cluster\"}[2m])"
+            legend: "{{`{{`}}instance{{`}}`}}"
+        axes:
+          left:
+            unit: cores
+    - graph:
+        title: Goroutine Quantity
+        datasource: Prometheus
+        span: 4
+        targets:
+        - prometheus:
+            query: "go_goroutines{job=\"kube-scheduler\",instance=~\"$instance\", cluster=\"$cluster\"}"
+            legend: "{{`{{`}}instance{{`}}`}}"
