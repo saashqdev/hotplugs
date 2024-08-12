@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#Copyright 2021 KubeWorkz Authors
+#Copyright 2024 KubeWorkz Authors
 #
 #Licensed under the Apache License, Version 2.0 (the "License");
 #you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 set -e
 
 # default download_url
-download_url="https://kubeworkz.nos-eastchina1.126.net/helm-chart/third/third-charts.tar.gz"
+download_url="https://kubeworkz.s3.amazonaws.com/helm-chart/third/third-charts.tar.gz"
 
 if [ ${DOWNLOAD_URL} ];then
   if [ ${DOWNLOAD_URL} != "" ]; then

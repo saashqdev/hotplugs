@@ -12,7 +12,7 @@
 #See the License for the specific language governing permissions and
 #limitations under the License.
 
-IMG ?= hub.c.163.com/kubeworkz/warden-init:latest
+IMG ?= kubeworkz/warden-init:latest
 
 pkg:
 	sh compress.sh
